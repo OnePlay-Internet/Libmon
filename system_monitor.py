@@ -2,6 +2,8 @@ import os
 import time
 import json
 import importlib
+import traceback
+
 import schedule
 
 from connection import create_influxdb_point, write_api, INFLUX_BUCKET, INFLUX_ORG
@@ -15,23 +17,27 @@ def load_config():
 
 
 def run_module(module_name):
-    module = importlib.import_module(f"modules.{module_name}")
-    data = module.collect_data()
+    try:
+        module = importlib.import_module(f"modules.{module_name}")
+        data = module.collect_data()
 
-    if module_name == 'kvm_monitor':
-        return
-    if data:
-        if isinstance(data, list):
-            # If collect data return multiple records
-            for record in data:
-                point = create_influxdb_point(module_name, record)
+        if module_name == 'kvm_monitor':
+            return
+        if data:
+            if isinstance(data, list):
+                # If collect data return multiple records
+                for record in data:
+                    point = create_influxdb_point(module_name, record)
+                    write_api.write(bucket=INFLUX_BUCKET, org=INFLUX_ORG, record=point)
+                    logger.debug(f"writing record for {module_name} finished.")
+
+            else:
+                point = create_influxdb_point(module_name, data)
                 write_api.write(bucket=INFLUX_BUCKET, org=INFLUX_ORG, record=point)
                 logger.debug(f"writing record for {module_name} finished.")
+    except Exception as e:
+        logger.debug(traceback.format_exc())
 
-        else:
-            point = create_influxdb_point(module_name, data)
-            write_api.write(bucket=INFLUX_BUCKET, org=INFLUX_ORG, record=point)
-            logger.debug(f"writing record for {module_name} finished.")
 
 
 if __name__ == '__main__':
